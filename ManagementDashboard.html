@@ -299,13 +299,6 @@
       color: #6b7280;
     }
 
-    .pdf-controls {
-      display: grid;
-      grid-template-columns: minmax(260px, 420px) auto;
-      gap: 12px;
-      align-items: end;
-      margin-bottom: 14px;
-    }
   </style>
 </head>
 <body>
@@ -374,7 +367,6 @@
         <button class="tab" data-view="movements" onclick="setView('movements')">Движения</button>
         <button class="tab" data-view="problems" onclick="setView('problems')">Проблемы</button>
         <button class="tab" data-view="responsibility" onclick="setView('responsibility')">Ответственные</button>
-        <button class="tab" data-view="export" onclick="setView('export')">PDF выгрузка</button>
       </div>
 
       <div id="view-overview" class="view active">
@@ -508,22 +500,6 @@
         </div>
       </div>
 
-      <div id="view-export" class="view">
-        <div class="card">
-          <div class="section-title">Выгрузка информации по объекту в PDF</div>
-          <div class="section-sub">Выберите объект, затем выгрузите подробный отчёт для руководства</div>
-          <div class="pdf-controls">
-            <div>
-              <label for="pdfObjectFilter">Объект для отчёта</label>
-              <select id="pdfObjectFilter" onchange="updatePdfButtonState()"></select>
-            </div>
-            <div>
-              <button id="btnExportPdf" class="btn btn-primary" onclick="exportObjectPdf()" disabled>Выгрузить в PDF</button>
-            </div>
-          </div>
-          <div class="section-sub">В отчёт входят: сводка по объекту, статистика, а также список товаров по типу и категории.</div>
-        </div>
-      </div>
     </div>
 
       <div id="view-responsibility" class="view">
@@ -619,8 +595,6 @@
     fillSelect('respObjectFilter', 'Все объекты', data.objects || []);
     fillSelect('respTypeFilter', 'Все типы', data.types || []);
     fillSelect('respEmployeeFilter', 'Все ответственные', data.employees || []);
-    fillSelect('pdfObjectFilter', 'Выберите объект', data.objects || []);
-    updatePdfButtonState();
     loadDashboard();
   }
 
@@ -857,57 +831,6 @@
     document.querySelectorAll('.tab').forEach(btn => btn.classList.toggle('active', btn.dataset.view === viewName));
     document.querySelectorAll('.view').forEach(view => view.classList.remove('active'));
     document.getElementById('view-' + viewName).classList.add('active');
-  }
-
-  function updatePdfButtonState() {
-    const objectName = (document.getElementById('pdfObjectFilter') || {}).value || '';
-    const btn = document.getElementById('btnExportPdf');
-    if (btn) btn.disabled = !objectName;
-  }
-
-  function exportObjectPdf() {
-    const objectName = (document.getElementById('pdfObjectFilter') || {}).value || '';
-    if (!objectName) {
-      alert('Сначала выберите объект для отчёта.');
-      return;
-    }
-
-    const btn = document.getElementById('btnExportPdf');
-    const previousLabel = btn.textContent;
-    btn.disabled = true;
-    btn.textContent = 'Формируем PDF...';
-
-    google.script.run
-      .withSuccessHandler(function (res) {
-        btn.disabled = false;
-        btn.textContent = previousLabel;
-
-        if (!res || !res.base64) {
-          alert('Не удалось сформировать PDF.');
-          return;
-        }
-
-        const mime = res.mimeType || 'application/pdf';
-        const filename = res.fileName || ('Отчет_по_объекту_' + objectName + '.pdf');
-        const href = 'data:' + mime + ';base64,' + res.base64;
-        const link = document.createElement('a');
-        link.href = href;
-        link.download = filename;
-        document.body.appendChild(link);
-        link.click();
-        document.body.removeChild(link);
-      })
-      .withFailureHandler(function (err) {
-        btn.disabled = false;
-        btn.textContent = previousLabel;
-        showError(err);
-      })
-      .exportManagementObjectReportPdf({
-        objectName: objectName,
-        typeName: document.getElementById('typeFilter').value,
-        dateFrom: document.getElementById('dateFrom').value,
-        dateTo: document.getElementById('dateTo').value
-      });
   }
 
   function fillProductsTypeFilter(rows) {
