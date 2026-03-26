@@ -12,10 +12,11 @@ function onOpen() {
   if (access.permissions.search) menu.addItem('3. Поиск товара', 'showSearchForm');
   if (access.permissions.storekeeperDashboard) menu.addItem('4. Дашборд кладовщика', 'showStorekeeperDashboard');
   if (access.permissions.managementDashboard) menu.addItem('5. Дашборд руководителя', 'showManagementDashboard');
+  if (access.permissions.managementDashboard) menu.addItem('6. Автопарк и поездки', 'showFleetTripsPanel');
   if (access.permissions.manageAccess) {
     menu.addSeparator();
-    menu.addItem('6. Управление доступом', 'showAccessAdminPanel');
-    menu.addItem('7. Защитить листы', 'syncSheetProtections');
+    menu.addItem('7. Управление доступом', 'showAccessAdminPanel');
+    menu.addItem('8. Защитить листы', 'syncSheetProtections');
   }
   menu.addToUi();
 }
@@ -644,6 +645,10 @@ function openQuickManagementDashboard() {
   showManagementDashboard();
 }
 
+function openQuickFleetTripsPanel() {
+  showFleetTripsPanel();
+}
+
 function openQuickRefreshAll() {
   requirePermission_('refreshAll', 'обновление данных');
   refreshAll();
@@ -659,6 +664,14 @@ function showManagementDashboard() {
     .setWidth(1400)
     .setHeight(900);
   SpreadsheetApp.getUi().showModalDialog(html, 'Дашборд руководителя');
+}
+
+function showFleetTripsPanel() {
+  requirePermission_('managementDashboard', 'панель автопарка и поездок');
+  const html = HtmlService.createHtmlOutputFromFile('FleetTripsPanel')
+    .setWidth(1400)
+    .setHeight(900);
+  SpreadsheetApp.getUi().showModalDialog(html, 'Автопарк и поездки');
 }
 
 function showInventoryForm() {
@@ -995,6 +1008,187 @@ function getManagementDashboardData(filters) {
     currentResponsibilities: getAssignedInstrumentRows(responsibilityFilters),
     history: getResponsibilityHistoryData_(responsibilityFilters)
   };
+}
+
+function getFleetPanelData() {
+  requirePermission_('managementDashboard', 'панель автопарка');
+  const sheets = ensureFleetSheets_();
+
+  const vehicles = readFleetVehicles_(sheets.vehicles);
+  const trips = readFleetTrips_(sheets.trips).slice(0, 200);
+
+  return {
+    vehicles: vehicles,
+    trips: trips
+  };
+}
+
+function saveFleetVehicle(payload) {
+  requirePermission_('managementDashboard', 'сохранение автомобиля');
+  payload = payload || {};
+  const sheets = ensureFleetSheets_();
+  const sheet = sheets.vehicles;
+
+  const carName = String(payload.carName || '').trim();
+  if (!carName) throw new Error('Укажи название автомобиля.');
+
+  const row = [
+    Utilities.getUuid(),
+    carName,
+    String(payload.plate || '').trim(),
+    String(payload.driver || '').trim(),
+    round3_(Number(payload.currentMileage) || 0),
+    round3_(Number(payload.nextServiceMileage) || 0),
+    String(payload.lastServiceDate || '').trim(),
+    String(payload.lastRepairDate || '').trim(),
+    String(payload.workDone || '').trim(),
+    round2_(Number(payload.repairCost) || 0),
+    String(payload.comment || '').trim(),
+    formatDateTimeRu_(new Date())
+  ];
+
+  sheet.getRange(sheet.getLastRow() + 1, 1, 1, row.length).setValues([row]);
+  autoResize_(sheet, 1, row.length);
+  return 'Автомобиль сохранён.';
+}
+
+function saveFleetTrip(payload) {
+  requirePermission_('managementDashboard', 'сохранение поездки');
+  payload = payload || {};
+  const sheets = ensureFleetSheets_();
+
+  const vehicleId = String(payload.vehicleId || '').trim();
+  const mileage = Number(payload.mileage) || 0;
+  if (!vehicleId) throw new Error('Выберите автомобиль.');
+  if (!isFinite(mileage) || mileage <= 0) throw new Error('Пробег поездки должен быть больше нуля.');
+
+  const vehicles = readFleetVehicles_(sheets.vehicles);
+  const vehicle = vehicles.find(function (v) { return v.id === vehicleId; });
+  if (!vehicle) throw new Error('Автомобиль не найден.');
+
+  const tripDate = String(payload.tripDate || '').trim() || Utilities.formatDate(new Date(), Session.getScriptTimeZone(), 'yyyy-MM-dd');
+  const tripType = String(payload.tripType || '').trim() || 'По городу';
+  const route = String(payload.route || '').trim();
+  const comment = String(payload.comment || '').trim();
+
+  const tripRow = [
+    tripDate,
+    vehicleId,
+    vehicle.carName,
+    tripType,
+    route,
+    round3_(mileage),
+    comment,
+    Session.getActiveUser().getEmail() || '',
+    new Date()
+  ];
+
+  sheets.trips.getRange(sheets.trips.getLastRow() + 1, 1, 1, tripRow.length).setValues([tripRow]);
+  autoResize_(sheets.trips, 1, tripRow.length);
+
+  const nextMileage = round3_((Number(vehicle.currentMileage) || 0) + mileage);
+  sheets.vehicles.getRange(vehicle.sheetRow, 5).setValue(nextMileage);
+  sheets.vehicles.getRange(vehicle.sheetRow, 12).setValue(formatDateTimeRu_(new Date()));
+
+  return 'Поездка сохранена.';
+}
+
+function ensureFleetSheets_() {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  let vehicles = ss.getSheetByName('Автопарк');
+  let trips = ss.getSheetByName('Поездки');
+
+  if (!vehicles) vehicles = ss.insertSheet('Автопарк');
+  if (!trips) trips = ss.insertSheet('Поездки');
+
+  if (vehicles.getLastRow() === 0) {
+    const headers = [[
+      'ID',
+      'Автомобиль',
+      'Госномер',
+      'Водитель',
+      'Текущий пробег',
+      'Ближайшее ТО (км)',
+      'Последнее ТО',
+      'Последний ремонт',
+      'Что делалось',
+      'Сумма ремонта',
+      'Комментарий',
+      'Обновлено'
+    ]];
+    vehicles.getRange(1, 1, 1, headers[0].length).setValues(headers);
+    formatHeader_(vehicles, 1, 1, 1, headers[0].length);
+    vehicles.setFrozenRows(1);
+  }
+
+  if (trips.getLastRow() === 0) {
+    const headers = [[
+      'Дата',
+      'ID авто',
+      'Автомобиль',
+      'Тип поездки',
+      'Маршрут/Объект',
+      'Накатанный пробег, км',
+      'Комментарий',
+      'Пользователь',
+      'Создано'
+    ]];
+    trips.getRange(1, 1, 1, headers[0].length).setValues(headers);
+    formatHeader_(trips, 1, 1, 1, headers[0].length);
+    trips.setFrozenRows(1);
+  }
+
+  return {
+    vehicles: vehicles,
+    trips: trips
+  };
+}
+
+function readFleetVehicles_(sheet) {
+  const lastRow = sheet.getLastRow();
+  if (lastRow < 2) return [];
+
+  return sheet.getRange(2, 1, lastRow - 1, 12).getValues()
+    .map(function (r, idx) {
+      return {
+        sheetRow: idx + 2,
+        id: String(r[0] || '').trim(),
+        carName: String(r[1] || '').trim(),
+        plate: String(r[2] || '').trim(),
+        driver: String(r[3] || '').trim(),
+        currentMileage: round3_(Number(r[4]) || 0),
+        nextServiceMileage: round3_(Number(r[5]) || 0),
+        lastServiceDate: String(r[6] || '').trim(),
+        lastRepairDate: String(r[7] || '').trim(),
+        workDone: String(r[8] || '').trim(),
+        repairCost: round2_(Number(r[9]) || 0),
+        comment: String(r[10] || '').trim(),
+        updatedAt: String(r[11] || '').trim()
+      };
+    })
+    .filter(function (v) { return v.id && v.carName; })
+    .sort(function (a, b) { return String(a.carName).localeCompare(String(b.carName), 'ru'); });
+}
+
+function readFleetTrips_(sheet) {
+  const lastRow = sheet.getLastRow();
+  if (lastRow < 2) return [];
+
+  return sheet.getRange(2, 1, lastRow - 1, 9).getValues()
+    .map(function (r) {
+      return {
+        tripDate: String(r[0] || '').trim(),
+        vehicleId: String(r[1] || '').trim(),
+        carName: String(r[2] || '').trim(),
+        tripType: String(r[3] || '').trim(),
+        route: String(r[4] || '').trim(),
+        mileage: round3_(Number(r[5]) || 0),
+        comment: String(r[6] || '').trim(),
+        user: String(r[7] || '').trim(),
+        createdAt: r[8] instanceof Date ? r[8].getTime() : 0
+      };
+    })
+    .sort(function (a, b) { return b.createdAt - a.createdAt; });
 }
 
 /**
