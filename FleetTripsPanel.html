@@ -1,0 +1,702 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <base target="_top">
+  <style>
+    :root {
+      --bg: #eef3fb;
+      --surface: #ffffff;
+      --surface-soft: #f8fbff;
+      --text: #0f2747;
+      --muted: #5d6b82;
+      --border: #d9e2f0;
+      --primary: #2f6fed;
+      --primary-soft: #e8f0ff;
+      --ok: #15924a;
+      --warn: #d28a00;
+      --bad: #d93025;
+      --shadow: 0 8px 24px rgba(24, 53, 102, 0.08);
+    }
+
+    * { box-sizing: border-box; }
+    body {
+      font-family: Inter, Arial, sans-serif;
+      margin: 0;
+      background: var(--bg);
+      color: var(--text);
+    }
+    .wrap { padding: 18px 20px; }
+    .topbar {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      gap: 12px;
+      margin-bottom: 14px;
+    }
+    h1 { margin: 0; font-size: 36px; line-height: 1.1; }
+    .sub { margin-top: 8px; color: var(--muted); font-size: 14px; }
+    .top-actions { display: flex; gap: 8px; }
+
+    .btn {
+      border: 1px solid transparent;
+      border-radius: 12px;
+      padding: 10px 14px;
+      font-size: 13px;
+      font-weight: 700;
+      cursor: pointer;
+      transition: .16s ease;
+    }
+    .btn-primary { background: var(--primary); color: #fff; }
+    .btn-primary:hover { filter: brightness(0.95); }
+    .btn-soft { background: #fff; border-color: var(--border); color: var(--text); }
+
+    .kpi-grid {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(180px, 1fr));
+      gap: 12px;
+      margin-bottom: 16px;
+    }
+    .kpi-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      box-shadow: var(--shadow);
+      padding: 14px 16px;
+    }
+    .kpi-label { color: var(--muted); font-size: 12px; margin-bottom: 8px; }
+    .kpi-value { font-size: 38px; font-weight: 800; line-height: 1; margin-bottom: 6px; }
+    .kpi-foot { font-size: 12px; color: var(--muted); }
+
+    .tabs { display: flex; gap: 8px; margin-bottom: 14px; }
+    .tab {
+      border: 1px solid var(--border);
+      background: #fff;
+      color: var(--text);
+      border-radius: 999px;
+      padding: 9px 14px;
+      font-size: 14px;
+      font-weight: 700;
+      cursor: pointer;
+    }
+    .tab.active { background: var(--primary-soft); border-color: #b9d1ff; color: #0b4fd7; }
+
+    .view { display:none; }
+    .view.active { display:block; }
+
+    .panel {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 18px;
+      box-shadow: var(--shadow);
+      padding: 16px;
+      margin-bottom: 14px;
+    }
+
+    .section-head {
+      display: flex;
+      align-items: flex-end;
+      justify-content: space-between;
+      gap: 12px;
+      margin-bottom: 12px;
+    }
+    .section-title { font-size: 30px; margin: 0; }
+    .section-desc { margin-top: 6px; font-size: 13px; color: var(--muted); }
+
+    .inline-controls { display: flex; gap: 8px; flex-wrap: wrap; }
+    input, select {
+      height: 38px;
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 0 12px;
+      font-size: 13px;
+      background: #fff;
+      color: var(--text);
+    }
+    .search { min-width: 280px; }
+
+    .table-wrap { border: 1px solid var(--border); border-radius: 14px; overflow: auto; }
+    table { width: 100%; border-collapse: collapse; font-size: 13px; }
+    thead th {
+      position: sticky; top: 0;
+      background: #f3f7ff;
+      color: #3f516d;
+      text-align: left;
+      padding: 10px;
+      border-bottom: 1px solid var(--border);
+      white-space: nowrap;
+    }
+    tbody td { padding: 11px 10px; border-bottom: 1px solid #edf2fb; vertical-align: top; }
+    .num { text-align: right; white-space: nowrap; }
+
+    .chips { display: flex; flex-wrap: wrap; gap: 6px; }
+    .chip {
+      font-size: 12px;
+      background: #edf2fb;
+      color: #27456d;
+      border: 1px solid #d9e4f6;
+      border-radius: 999px;
+      padding: 4px 8px;
+    }
+
+    .status {
+      font-size: 12px;
+      font-weight: 700;
+      border-radius: 999px;
+      padding: 4px 10px;
+      display: inline-block;
+      white-space: nowrap;
+    }
+    .status-ok { background: #e7f7ee; color: var(--ok); }
+    .status-warn { background: #fff5df; color: var(--warn); }
+    .status-bad { background: #ffe8e6; color: var(--bad); }
+
+    .two-col { display: grid; grid-template-columns: 1.3fr .9fr; gap: 12px; }
+    .mini-card {
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      padding: 12px;
+      background: var(--surface-soft);
+      margin-top: 10px;
+    }
+    .mini-title { font-size: 28px; margin: 0 0 6px; }
+    .bar-row { margin-bottom: 10px; }
+    .bar-label { display:flex; justify-content: space-between; font-size:12px; margin-bottom:4px; }
+    .bar-track { height: 8px; border-radius: 999px; background:#dde7f7; }
+    .bar-fill { height:100%; border-radius: 999px; background: var(--primary); }
+
+    .empty { padding: 18px; color: var(--muted); }
+
+    .modal {
+      position: fixed; inset: 0;
+      background: rgba(16,34,58,0.35);
+      display: none;
+      align-items: center;
+      justify-content: center;
+      z-index: 999;
+    }
+    .modal.show { display: flex; }
+    .modal-card {
+      width: min(760px, 92vw);
+      max-height: 90vh;
+      overflow: auto;
+      background: #fff;
+      border-radius: 16px;
+      box-shadow: 0 18px 40px rgba(9, 26, 54, 0.25);
+      padding: 16px;
+    }
+    .modal-head { display:flex; justify-content:space-between; align-items:center; margin-bottom:12px; }
+    .modal-title { margin:0; font-size:22px; }
+    .form-grid { display:grid; grid-template-columns: repeat(2, minmax(0,1fr)); gap:10px; }
+    .field label { display:block; font-size:12px; color:var(--muted); margin:0 0 5px; }
+    .field input, .field select { width:100%; }
+
+    .toast {
+      position: fixed;
+      right: 16px;
+      bottom: 16px;
+      background: #123;
+      color: #fff;
+      padding: 10px 14px;
+      border-radius: 10px;
+      font-size: 13px;
+      display: none;
+    }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="topbar">
+      <div>
+        <h1>Автопарк и поездки</h1>
+        <div class="sub">Управленческая панель учета машин, обслуживания и выездов на объекты.</div>
+      </div>
+      <div class="top-actions">
+        <button class="btn btn-soft" onclick="loadData()">Обновить</button>
+        <button class="btn btn-primary" onclick="openModal('trip')">Добавить запись</button>
+      </div>
+    </div>
+
+    <div class="kpi-grid">
+      <div class="kpi-card"><div class="kpi-label">Машин в учете</div><div class="kpi-value" id="kpiCars">0</div><div class="kpi-foot" id="kpiAttention">0 требуют внимания</div></div>
+      <div class="kpi-card"><div class="kpi-label">Расходы на обслуживание</div><div class="kpi-value" id="kpiService">₽ 0</div><div class="kpi-foot">Суммарно по ТО и ремонтам</div></div>
+      <div class="kpi-card"><div class="kpi-label">Поездок</div><div class="kpi-value" id="kpiTrips">0</div><div class="kpi-foot">Всего записей в журнале</div></div>
+      <div class="kpi-card"><div class="kpi-label">Пробег по поездкам</div><div class="kpi-value" id="kpiMileage">0 км</div><div class="kpi-foot">Накатанный километраж</div></div>
+    </div>
+
+    <div class="tabs">
+      <button class="tab active" data-view="maintenance" onclick="setView('maintenance')">Обслуживание машин</button>
+      <button class="tab" data-view="trips" onclick="setView('trips')">Поездки на объекты</button>
+      <button class="tab" data-view="history" onclick="setView('history')">Общая статистика работ</button>
+    </div>
+
+    <div id="view-maintenance" class="view active">
+      <div class="panel">
+        <div class="section-head">
+          <div>
+            <h2 class="section-title">Реестр обслуживания</h2>
+            <div class="section-desc">Когда обслуживалась машина, сколько потратили и какое состояние по следующему ТО.</div>
+          </div>
+          <div class="inline-controls">
+            <input id="maintSearch" class="search" placeholder="Поиск по машине / номеру" oninput="renderMaintenance()">
+            <select id="maintStatusFilter" onchange="renderMaintenance()">
+              <option value="">Все статусы</option>
+              <option>В норме</option><option>Скоро ТО</option><option>Просрочено</option>
+            </select>
+            <button class="btn btn-soft" onclick="openModal('vehicle')">Добавить авто</button>
+            <button class="btn btn-primary" onclick="openModal('service')">Добавить ТО</button>
+          </div>
+        </div>
+
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>Автомобиль</th><th>Гос. номер</th><th>Последнее обслуживание</th><th class="num">Пробег</th><th class="num">Сумма</th><th>Что делалось</th><th class="num">Следующее ТО</th><th>Статус</th></tr></thead>
+            <tbody id="maintenanceBody"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="two-col">
+        <div class="panel">
+          <h3 class="mini-title">Структура затрат</h3>
+          <div id="costStructure"></div>
+        </div>
+        <div class="panel">
+          <h3 class="mini-title">Ближайшие задачи</h3>
+          <div id="attentionList"></div>
+        </div>
+      </div>
+    </div>
+
+    <div id="view-trips" class="view">
+      <div class="panel">
+        <div class="section-head">
+          <div>
+            <h2 class="section-title">Журнал поездок</h2>
+            <div class="section-desc">Куда ездили, кто ездил, цель поездки, километраж и расходы.</div>
+          </div>
+          <div class="inline-controls">
+            <input id="tripSearch" class="search" placeholder="Объект / сотрудник / маршрут" oninput="renderTrips()">
+            <select id="tripTypeFilter" onchange="renderTrips()"><option value="">Все направления</option><option>На объект</option><option>По городу</option></select>
+            <button class="btn btn-primary" onclick="openModal('trip')">Добавить поездку</button>
+          </div>
+        </div>
+
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>Дата</th><th>Объект</th><th>Маршрут</th><th>Машина / водитель</th><th>Цель</th><th class="num">Км</th><th class="num">Расходы</th><th>Комментарий</th></tr></thead>
+            <tbody id="tripsBody"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="two-col">
+        <div class="panel">
+          <h3 class="mini-title">Частые направления</h3>
+          <div id="frequentDirections"></div>
+        </div>
+        <div class="panel">
+          <h3 class="mini-title">Итоги по поездкам</h3>
+          <div id="tripFacts"></div>
+        </div>
+      </div>
+    </div>
+
+    <div id="view-history" class="view">
+      <div class="panel">
+        <div class="section-head">
+          <div>
+            <h2 class="section-title">Что делалось за все время</h2>
+            <div class="section-desc">Общая статистика ТО и ремонтов по всей истории учета.</div>
+          </div>
+          <div class="inline-controls">
+            <input id="histSearch" class="search" placeholder="Поиск по машине / работам" oninput="renderHistory()">
+            <select id="histTypeFilter" onchange="renderHistory()">
+              <option value="">Все типы работ</option>
+              <option>ТО</option><option>Ремонт</option><option>Диагностика</option><option>Прочее</option>
+            </select>
+          </div>
+        </div>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>Дата</th><th>Автомобиль</th><th>Тип</th><th>Что делалось</th><th class="num">Пробег</th><th class="num">Сумма</th><th>Комментарий</th></tr></thead>
+            <tbody id="historyBody"></tbody>
+          </table>
+        </div>
+      </div>
+      <div class="two-col">
+        <div class="panel">
+          <h3 class="mini-title">Топ работ по расходам</h3>
+          <div id="historyTopWorks"></div>
+        </div>
+        <div class="panel">
+          <h3 class="mini-title">Итоги за весь период</h3>
+          <div id="historyTotals"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div id="modal" class="modal">
+    <div class="modal-card">
+      <div class="modal-head">
+        <h3 id="modalTitle" class="modal-title">Добавление записи</h3>
+        <button class="btn btn-soft" onclick="closeModal()">Закрыть</button>
+      </div>
+      <div id="modalBody"></div>
+    </div>
+  </div>
+
+  <datalist id="objectsList"></datalist>
+  <datalist id="employeesList"></datalist>
+
+  <div id="toast" class="toast"></div>
+
+<script>
+  let state = { vehicles: [], maintenance: [], trips: [], references: { objects: [], employees: [] }, summary: {} };
+  let currentView = 'maintenance';
+
+  function init() { loadData(); }
+
+  function setView(viewName) {
+    currentView = viewName;
+    document.querySelectorAll('.tab').forEach(btn => btn.classList.toggle('active', btn.dataset.view === viewName));
+    document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
+    document.getElementById('view-' + viewName).classList.add('active');
+  }
+
+  function loadData() {
+    google.script.run.withSuccessHandler(function(data) {
+      state = data || state;
+      fillReferenceLists();
+      renderSummary();
+      renderMaintenance();
+      renderTrips();
+      renderHistory();
+    }).withFailureHandler(showError).getFleetPanelData();
+  }
+
+  function fillReferenceLists() {
+    const objects = (state.references && state.references.objects) || [];
+    const employees = (state.references && state.references.employees) || [];
+    document.getElementById('objectsList').innerHTML = objects.map(v => '<option value="' + esc(v) + '"></option>').join('');
+    document.getElementById('employeesList').innerHTML = employees.map(v => '<option value="' + esc(v) + '"></option>').join('');
+  }
+
+  function renderSummary() {
+    const s = state.summary || {};
+    document.getElementById('kpiCars').textContent = fmtNum(s.carsCount || 0);
+    document.getElementById('kpiAttention').textContent = fmtNum(s.attentionCount || 0) + ' требуют внимания';
+    document.getElementById('kpiService').textContent = '₽ ' + fmtMoney(s.totalServiceCost || 0);
+    document.getElementById('kpiTrips').textContent = fmtNum(s.tripsCount || 0);
+    document.getElementById('kpiMileage').textContent = fmtNum(s.totalTripMileage || 0) + ' км';
+  }
+
+  function renderMaintenance() {
+    const q = norm(val('maintSearch'));
+    const statusFilter = val('maintStatusFilter');
+    const rows = (state.vehicles || []).filter(v => {
+      const hit = !q || norm([v.carName, v.plate, v.driver].join(' ')).includes(q);
+      const statusHit = !statusFilter || (v.status === statusFilter);
+      return hit && statusHit;
+    });
+
+    const body = document.getElementById('maintenanceBody');
+    if (!rows.length) {
+      body.innerHTML = '<tr><td colspan="8" class="empty">Нет данных по обслуживанию</td></tr>';
+    } else {
+      body.innerHTML = rows.map(v => {
+        const chips = String(v.workDone || '').split(/[,;]+/).map(x => x.trim()).filter(Boolean).slice(0,4)
+          .map(x => '<span class="chip">' + esc(x) + '</span>').join('');
+        return '<tr>' +
+          '<td><b>' + esc(v.carName) + '</b><div style="color:#6b7280;font-size:12px;">' + esc(v.driver || 'Водитель не указан') + '</div></td>' +
+          '<td>' + esc(v.plate) + '</td>' +
+          '<td>' + esc(fmtDate(v.lastServiceDate || '—')) + '</td>' +
+          '<td class="num">' + fmtNum(v.currentMileage) + ' км</td>' +
+          '<td class="num">₽ ' + fmtMoney(v.repairCost) + '</td>' +
+          '<td><div class="chips">' + (chips || '<span style="color:#9ca3af;">—</span>') + '</div></td>' +
+          '<td class="num">' + fmtNum(v.nextServiceMileage) + ' км</td>' +
+          '<td>' + statusBadge(v.status) + '</td>' +
+          '</tr>';
+      }).join('');
+    }
+
+    renderCostStructure();
+    renderAttention();
+  }
+
+  function renderCostStructure() {
+    const map = {};
+    (state.maintenance || []).forEach(r => {
+      const key = (r.recordType || 'Прочее');
+      map[key] = (map[key] || 0) + (Number(r.amount) || 0);
+    });
+    const total = Object.values(map).reduce((a,b)=>a+b,0) || 1;
+    const entries = Object.keys(map).sort((a,b)=>map[b]-map[a]).slice(0,5);
+    const box = document.getElementById('costStructure');
+    box.innerHTML = entries.length ? entries.map(k => {
+      const pct = Math.round((map[k]/total)*100);
+      return '<div class="bar-row"><div class="bar-label"><span>' + esc(k) + '</span><span>' + pct + '%</span></div><div class="bar-track"><div class="bar-fill" style="width:' + pct + '%"></div></div></div>';
+    }).join('') : '<div class="empty">Нет расходов для анализа</div>';
+  }
+
+  function renderAttention() {
+    const list = (state.vehicles || []).filter(v => v.status !== 'В норме').slice(0,6);
+    const box = document.getElementById('attentionList');
+    box.innerHTML = list.length ? list.map(v =>
+      '<div class="mini-card"><b>' + esc(v.carName) + '</b> — ' + statusBadge(v.status) +
+      '<div style="font-size:12px;color:#607088;margin-top:6px;">Пробег: ' + fmtNum(v.currentMileage) + ' км, следующее ТО: ' + fmtNum(v.nextServiceMileage) + ' км.</div></div>'
+    ).join('') : '<div class="empty">Все машины в нормальном статусе.</div>';
+  }
+
+  function renderTrips() {
+    const q = norm(val('tripSearch'));
+    const typeFilter = val('tripTypeFilter');
+    const rows = (state.trips || []).filter(t => {
+      const hit = !q || norm([t.objectName, t.route, t.employee, t.carName, t.purpose].join(' ')).includes(q);
+      const typeHit = !typeFilter || t.tripType === typeFilter;
+      return hit && typeHit;
+    });
+
+    const body = document.getElementById('tripsBody');
+    if (!rows.length) {
+      body.innerHTML = '<tr><td colspan="8" class="empty">Поездок пока нет</td></tr>';
+    } else {
+      body.innerHTML = rows.map(t =>
+        '<tr>' +
+          '<td>' + esc(fmtDate(t.tripDate)) + '</td>' +
+          '<td><b>' + esc(t.objectName || '—') + '</b></td>' +
+          '<td>' + esc(t.route || '—') + '</td>' +
+          '<td><b>' + esc(t.carName || '') + '</b><div style="color:#6b7280;font-size:12px;">' + esc(t.employee || '—') + '</div></td>' +
+          '<td>' + esc(t.purpose || '—') + '</td>' +
+          '<td class="num">' + fmtNum(t.mileage) + ' км</td>' +
+          '<td class="num">₽ ' + fmtMoney(t.expenses) + '</td>' +
+          '<td>' + esc(t.comment || '') + '</td>' +
+        '</tr>'
+      ).join('');
+    }
+
+    renderTripDirections(rows);
+    renderTripFacts(rows);
+  }
+
+  function renderHistory() {
+    const q = norm(val('histSearch'));
+    const type = val('histTypeFilter');
+    const rows = (state.maintenance || []).filter(r => {
+      const hit = !q || norm([r.carName, r.serviceItems, r.comment].join(' ')).includes(q);
+      const typeHit = !type || r.recordType === type;
+      return hit && typeHit;
+    });
+
+    const body = document.getElementById('historyBody');
+    if (!rows.length) {
+      body.innerHTML = '<tr><td colspan=\"7\" class=\"empty\">История работ пока пуста</td></tr>';
+    } else {
+      body.innerHTML = rows.map(r =>
+        '<tr>' +
+          '<td>' + esc(fmtDate(r.eventDate)) + '</td>' +
+          '<td><b>' + esc(r.carName) + '</b></td>' +
+          '<td>' + esc(r.recordType || '—') + '</td>' +
+          '<td><div class=\"chips\">' + workChips(r.serviceItems) + '</div></td>' +
+          '<td class=\"num\">' + fmtNum(r.mileage) + ' км</td>' +
+          '<td class=\"num\">₽ ' + fmtMoney(r.amount) + '</td>' +
+          '<td>' + esc(r.comment || '') + '</td>' +
+        '</tr>'
+      ).join('');
+    }
+
+    renderHistoryTop(rows);
+    renderHistoryTotals(rows);
+  }
+
+  function renderHistoryTop(rows) {
+    const map = {};
+    rows.forEach(r => {
+      const labels = String(r.serviceItems || 'Без описания').split(/[,;]+/).map(x => x.trim()).filter(Boolean);
+      (labels.length ? labels : ['Без описания']).forEach(label => {
+        map[label] = (map[label] || 0) + (Number(r.amount) || 0);
+      });
+    });
+    const list = Object.keys(map).map(k => ({ name: k, sum: map[k] })).sort((a, b) => b.sum - a.sum).slice(0, 6);
+    const total = list.reduce((s, r) => s + r.sum, 0) || 1;
+    document.getElementById('historyTopWorks').innerHTML = list.length ? list.map(r => {
+      const pct = Math.round((r.sum / total) * 100);
+      return '<div class=\"bar-row\"><div class=\"bar-label\"><span>' + esc(r.name) + '</span><span>₽ ' + fmtMoney(r.sum) + '</span></div><div class=\"bar-track\"><div class=\"bar-fill\" style=\"width:' + pct + '%\"></div></div></div>';
+    }).join('') : '<div class=\"empty\">Недостаточно данных для анализа</div>';
+  }
+
+  function renderHistoryTotals(rows) {
+    const totalAmount = rows.reduce((s, r) => s + (Number(r.amount) || 0), 0);
+    const totalCount = rows.length;
+    const avg = totalCount ? (totalAmount / totalCount) : 0;
+    const byType = {};
+    rows.forEach(r => {
+      const key = r.recordType || 'Прочее';
+      byType[key] = (byType[key] || 0) + 1;
+    });
+    const typeLines = Object.keys(byType).sort((a, b) => byType[b] - byType[a]).map(k => '<div style=\"margin-top:8px;\">' + esc(k) + ': <b>' + fmtNum(byType[k]) + '</b></div>').join('');
+    document.getElementById('historyTotals').innerHTML =
+      '<div class=\"mini-card\"><b>Всего записей</b><div style=\"margin-top:6px;font-size:22px;font-weight:800;\">' + fmtNum(totalCount) + '</div></div>' +
+      '<div class=\"mini-card\"><b>Общие расходы</b><div style=\"margin-top:6px;font-size:22px;font-weight:800;\">₽ ' + fmtMoney(totalAmount) + '</div></div>' +
+      '<div class=\"mini-card\"><b>Средний чек работ</b><div style=\"margin-top:6px;font-size:22px;font-weight:800;\">₽ ' + fmtMoney(avg) + '</div>' + typeLines + '</div>';
+  }
+
+  function renderTripDirections(rows) {
+    const map = {};
+    rows.forEach(t => {
+      const key = t.objectName || t.route || 'Без направления';
+      if (!map[key]) map[key] = { trips: 0, mileage: 0, expenses: 0 };
+      map[key].trips += 1;
+      map[key].mileage += Number(t.mileage) || 0;
+      map[key].expenses += Number(t.expenses) || 0;
+    });
+    const top = Object.keys(map).map(k => ({ name: k, ...map[k] })).sort((a,b)=>b.trips-a.trips).slice(0,5);
+    document.getElementById('frequentDirections').innerHTML = top.length ? top.map(x =>
+      '<div class="mini-card"><b>' + esc(x.name) + '</b><div style="font-size:12px;color:#607088;margin-top:6px;">' + fmtNum(x.trips) + ' поездок, ' + fmtNum(x.mileage) + ' км, расходы ₽ ' + fmtMoney(x.expenses) + '</div></div>'
+    ).join('') : '<div class="empty">Нет направлений для анализа</div>';
+  }
+
+  function renderTripFacts(rows) {
+    const mileage = rows.reduce((s,r)=>s+(Number(r.mileage)||0),0);
+    const expenses = rows.reduce((s,r)=>s+(Number(r.expenses)||0),0);
+    const byCar = {};
+    rows.forEach(r => { byCar[r.carName || 'Без машины'] = (byCar[r.carName || 'Без машины'] || 0) + (Number(r.mileage)||0); });
+    const topCar = Object.keys(byCar).sort((a,b)=>byCar[b]-byCar[a])[0] || '—';
+
+    document.getElementById('tripFacts').innerHTML =
+      '<div class="mini-card"><b>Суммарный пробег</b><div style="margin-top:6px;font-size:24px;font-weight:800;">' + fmtNum(mileage) + ' км</div></div>' +
+      '<div class="mini-card"><b>Суммарные расходы</b><div style="margin-top:6px;font-size:24px;font-weight:800;">₽ ' + fmtMoney(expenses) + '</div></div>' +
+      '<div class="mini-card"><b>Наиболее загруженная машина</b><div style="margin-top:6px;">' + esc(topCar) + '</div></div>';
+  }
+
+  function openModal(type) {
+    const vehicles = state.vehicles || [];
+    const vehicleOptions = '<option value="">Выберите авто</option>' + vehicles.map(v => '<option value="' + esc(v.id) + '">' + esc(v.carName + ' (' + (v.plate || 'без номера') + ')') + '</option>').join('');
+    const today = new Date().toISOString().slice(0,10);
+
+    let title = '';
+    let html = '';
+
+    if (type === 'vehicle') {
+      title = 'Добавить автомобиль';
+      html = '<div class="form-grid">' +
+        field('Модель / название*', '<input id="fCarName">') +
+        field('Госномер', '<input id="fPlate">') +
+        field('Водитель по умолчанию', '<input id="fDriver" list="employeesList">') +
+        field('Текущий пробег*', '<input id="fMileage" type="number" min="0" step="1">') +
+        field('Ближайшее ТО (км)', '<input id="fNextService" type="number" min="0" step="1">') +
+        field('Комментарий', '<input id="fComment">') +
+        '</div><div style="margin-top:12px;"><button class="btn btn-primary" onclick="submitVehicle()">Сохранить автомобиль</button></div>';
+    }
+
+    if (type === 'service') {
+      title = 'Добавить ТО / ремонт';
+      html = '<div class="form-grid">' +
+        field('Автомобиль*', '<select id="sVehicleId">' + vehicleOptions + '</select>') +
+        field('Дата*', '<input id="sDate" type="date" value="' + today + '">') +
+        field('Тип записи', '<select id="sType"><option>ТО</option><option>Ремонт</option><option>Диагностика</option><option>Прочее</option></select>') +
+        field('Пробег на момент', '<input id="sMileage" type="number" min="0" step="1">') +
+        field('Что делалось', '<input id="sItems" placeholder="Замена масла, фильтры...">') +
+        field('Сумма', '<input id="sAmount" type="number" min="0" step="0.01">') +
+        field('Следующее ТО (км)', '<input id="sNext" type="number" min="0" step="1">') +
+        field('Комментарий', '<input id="sComment">') +
+        '</div><div style="margin-top:12px;"><button class="btn btn-primary" onclick="submitService()">Сохранить ТО</button></div>';
+    }
+
+    if (type === 'trip') {
+      title = 'Добавить поездку';
+      html = '<div class="form-grid">' +
+        field('Дата поездки*', '<input id="tDate" type="date" value="' + today + '">') +
+        field('Автомобиль*', '<select id="tVehicleId">' + vehicleOptions + '</select>') +
+        field('Сотрудник', '<input id="tEmployee" list="employeesList">') +
+        field('Тип поездки', '<select id="tType"><option>На объект</option><option>По городу</option></select>') +
+        field('Объект', '<input id="tObject" list="objectsList">') +
+        field('Маршрут', '<input id="tRoute">') +
+        field('Цель поездки', '<input id="tPurpose">') +
+        field('Километраж*', '<input id="tMileage" type="number" min="0" step="1">') +
+        field('Расходы', '<input id="tExpenses" type="number" min="0" step="0.01">') +
+        field('Комментарий', '<input id="tComment">') +
+        '</div><div style="margin-top:12px;"><button class="btn btn-primary" onclick="submitTrip()">Сохранить поездку</button></div>';
+    }
+
+    document.getElementById('modalTitle').textContent = title;
+    document.getElementById('modalBody').innerHTML = html;
+    document.getElementById('modal').classList.add('show');
+  }
+
+  function closeModal() { document.getElementById('modal').classList.remove('show'); }
+  function field(label, control) { return '<div class="field"><label>' + label + '</label>' + control + '</div>'; }
+
+  function submitVehicle() {
+    const payload = {
+      carName: val('fCarName'), plate: val('fPlate'), driver: val('fDriver'),
+      currentMileage: val('fMileage'), nextServiceMileage: val('fNextService'), comment: val('fComment'), active: 'Да'
+    };
+    if (!payload.carName || !payload.currentMileage) return showError('Заполни обязательные поля автомобиля.');
+    google.script.run.withSuccessHandler(function(msg){ closeModal(); toast(msg || 'Авто сохранено'); loadData(); }).withFailureHandler(showError).saveFleetVehicle(payload);
+  }
+
+  function submitService() {
+    const payload = {
+      vehicleId: val('sVehicleId'), eventDate: val('sDate'), recordType: val('sType'), mileage: val('sMileage'),
+      serviceItems: val('sItems'), amount: val('sAmount'), comment: val('sComment'), nextServiceMileage: val('sNext')
+    };
+    if (!payload.vehicleId || !payload.eventDate) return showError('Заполни обязательные поля ТО/ремонта.');
+    google.script.run.withSuccessHandler(function(msg){ closeModal(); toast(msg || 'ТО сохранено'); loadData(); }).withFailureHandler(showError).saveFleetMaintenance(payload);
+  }
+
+  function submitTrip() {
+    const payload = {
+      tripDate: val('tDate'), vehicleId: val('tVehicleId'), employee: val('tEmployee'),
+      tripType: val('tType'), objectName: val('tObject'), route: val('tRoute'), purpose: val('tPurpose'),
+      mileage: val('tMileage'), expenses: val('tExpenses'), comment: val('tComment')
+    };
+    if (!payload.tripDate || !payload.vehicleId || !payload.mileage) return showError('Заполни обязательные поля поездки.');
+    google.script.run.withSuccessHandler(function(msg){ closeModal(); toast(msg || 'Поездка сохранена'); loadData(); }).withFailureHandler(showError).saveFleetTrip(payload);
+  }
+
+  function statusBadge(status) {
+    if (status === 'В норме') return '<span class="status status-ok">В норме</span>';
+    if (status === 'Скоро ТО') return '<span class="status status-warn">Скоро ТО</span>';
+    return '<span class="status status-bad">Просрочено</span>';
+  }
+
+  function toast(message) {
+    const el = document.getElementById('toast');
+    el.textContent = message;
+    el.style.display = 'block';
+    setTimeout(() => { el.style.display = 'none'; }, 2800);
+  }
+
+  function showError(err) {
+    const text = (err && err.message) ? err.message : String(err || 'Ошибка');
+    alert(text);
+  }
+
+  function val(id) { const el = document.getElementById(id); return el ? el.value : ''; }
+  function workChips(text) {
+    const items = String(text || '').split(/[,;]+/).map(x => x.trim()).filter(Boolean).slice(0, 5);
+    return items.length ? items.map(x => '<span class=\"chip\">' + esc(x) + '</span>').join('') : '<span style=\"color:#9ca3af;\">—</span>';
+  }
+  function fmtDate(v) {
+    const str = String(v || '').trim();
+    if (!str) return '';
+    if (/^\\d{2}\\.\\d{2}\\.\\d{4}$/.test(str)) return str;
+    const d = new Date(str);
+    if (!isNaN(d.getTime())) {
+      const dd = String(d.getDate()).padStart(2, '0');
+      const mm = String(d.getMonth() + 1).padStart(2, '0');
+      const yy = d.getFullYear();
+      return dd + '.' + mm + '.' + yy;
+    }
+    return str;
+  }
+  function esc(v) { return String(v || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+  function fmtMoney(v) { return (Number(v)||0).toLocaleString('ru-RU', { minimumFractionDigits: 0, maximumFractionDigits: 0 }); }
+  function fmtNum(v) { const n = Number(v)||0; return n.toLocaleString('ru-RU', { minimumFractionDigits: n%1===0?0:2, maximumFractionDigits: 2 }); }
+  function norm(v) { return String(v||'').toLowerCase().trim(); }
+
+  init();
+</script>
+</body>
+</html>
