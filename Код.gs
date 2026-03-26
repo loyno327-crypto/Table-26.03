@@ -682,6 +682,14 @@ function showFleetTripsPanel() {
   SpreadsheetApp.getUi().showModalDialog(html, 'Автопарк и поездки');
 }
 
+function showFleetTripsPanel() {
+  requirePermission_('managementDashboard', 'панель автопарка и поездок');
+  const html = HtmlService.createHtmlOutputFromFile('FleetTripsPanel')
+    .setWidth(1400)
+    .setHeight(900);
+  SpreadsheetApp.getUi().showModalDialog(html, 'Автопарк и поездки');
+}
+
 function showInventoryForm() {
   requirePermission_('inventory', 'инвентаризация');
   const html = HtmlService.createHtmlOutputFromFile('InventoryForm')
@@ -1267,7 +1275,7 @@ function readFleetVehicles_(sheet) {
   const lastRow = sheet.getLastRow();
   if (lastRow < 2) return [];
 
-  return sheet.getRange(2, 1, lastRow - 1, 14).getValues()
+  return sheet.getRange(2, 1, lastRow - 1, 13).getValues()
     .map(function (r, idx) {
       return {
         sheetRow: idx + 2,
@@ -1277,8 +1285,8 @@ function readFleetVehicles_(sheet) {
         driver: String(r[3] || '').trim(),
         currentMileage: round3_(Number(r[4]) || 0),
         nextServiceMileage: round3_(Number(r[5]) || 0),
-        lastServiceDate: String(r[6] || '').trim(),
-        lastRepairDate: String(r[7] || '').trim(),
+        lastServiceDate: formatDateShortRu_(r[6]),
+        lastRepairDate: formatDateShortRu_(r[7]),
         workDone: String(r[8] || '').trim(),
         repairCost: round2_(Number(r[9]) || 0),
         comment: String(r[10] || '').trim(),
@@ -1299,7 +1307,7 @@ function readFleetMaintenance_(sheet) {
     .map(function (r) {
       return {
         id: String(r[0] || '').trim(),
-        eventDate: String(r[1] || '').trim(),
+        eventDate: formatDateShortRu_(r[1]),
         vehicleId: String(r[2] || '').trim(),
         carName: String(r[3] || '').trim(),
         recordType: String(r[4] || '').trim(),
@@ -1319,11 +1327,11 @@ function readFleetTrips_(sheet) {
   const lastRow = sheet.getLastRow();
   if (lastRow < 2) return [];
 
-  return sheet.getRange(2, 1, lastRow - 1, 13).getValues()
+  return sheet.getRange(2, 1, lastRow - 1, 14).getValues()
     .map(function (r) {
       return {
         id: String(r[0] || '').trim(),
-        tripDate: String(r[1] || '').trim(),
+        tripDate: formatDateShortRu_(r[1]),
         vehicleId: String(r[2] || '').trim(),
         carName: String(r[3] || '').trim(),
         employee: String(r[4] || '').trim(),
@@ -1347,6 +1355,21 @@ function calcVehicleServiceStatus_(currentMileage, nextServiceMileage) {
   if (!next || next <= current) return 'Просрочено';
   if ((next - current) <= 1000) return 'Скоро ТО';
   return 'В норме';
+}
+
+function formatDateShortRu_(value) {
+  if (!value) return '';
+  if (value instanceof Date) {
+    return Utilities.formatDate(value, Session.getScriptTimeZone(), 'dd.MM.yyyy');
+  }
+
+  const str = String(value).trim();
+  if (!str) return '';
+  const maybeDate = new Date(str);
+  if (!isNaN(maybeDate.getTime()) && /\d{4}[-/.]\d{1,2}[-/.]\d{1,2}/.test(str)) {
+    return Utilities.formatDate(maybeDate, Session.getScriptTimeZone(), 'dd.MM.yyyy');
+  }
+  return str;
 }
 
 /**

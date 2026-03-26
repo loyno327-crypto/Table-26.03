@@ -226,6 +226,7 @@
     <div class="tabs">
       <button class="tab active" data-view="maintenance" onclick="setView('maintenance')">Обслуживание машин</button>
       <button class="tab" data-view="trips" onclick="setView('trips')">Поездки на объекты</button>
+      <button class="tab" data-view="history" onclick="setView('history')">Общая статистика работ</button>
     </div>
 
     <div id="view-maintenance" class="view active">
@@ -299,6 +300,40 @@
         </div>
       </div>
     </div>
+
+    <div id="view-history" class="view">
+      <div class="panel">
+        <div class="section-head">
+          <div>
+            <h2 class="section-title">Что делалось за все время</h2>
+            <div class="section-desc">Общая статистика ТО и ремонтов по всей истории учета.</div>
+          </div>
+          <div class="inline-controls">
+            <input id="histSearch" class="search" placeholder="Поиск по машине / работам" oninput="renderHistory()">
+            <select id="histTypeFilter" onchange="renderHistory()">
+              <option value="">Все типы работ</option>
+              <option>ТО</option><option>Ремонт</option><option>Диагностика</option><option>Прочее</option>
+            </select>
+          </div>
+        </div>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>Дата</th><th>Автомобиль</th><th>Тип</th><th>Что делалось</th><th class="num">Пробег</th><th class="num">Сумма</th><th>Комментарий</th></tr></thead>
+            <tbody id="historyBody"></tbody>
+          </table>
+        </div>
+      </div>
+      <div class="two-col">
+        <div class="panel">
+          <h3 class="mini-title">Топ работ по расходам</h3>
+          <div id="historyTopWorks"></div>
+        </div>
+        <div class="panel">
+          <h3 class="mini-title">Итоги за весь период</h3>
+          <div id="historyTotals"></div>
+        </div>
+      </div>
+    </div>
   </div>
 
   <div id="modal" class="modal">
@@ -336,6 +371,7 @@
       renderSummary();
       renderMaintenance();
       renderTrips();
+      renderHistory();
     }).withFailureHandler(showError).getFleetPanelData();
   }
 
@@ -374,7 +410,7 @@
         return '<tr>' +
           '<td><b>' + esc(v.carName) + '</b><div style="color:#6b7280;font-size:12px;">' + esc(v.driver || 'Водитель не указан') + '</div></td>' +
           '<td>' + esc(v.plate) + '</td>' +
-          '<td>' + esc(v.lastServiceDate || '—') + '</td>' +
+          '<td>' + esc(fmtDate(v.lastServiceDate || '—')) + '</td>' +
           '<td class="num">' + fmtNum(v.currentMileage) + ' км</td>' +
           '<td class="num">₽ ' + fmtMoney(v.repairCost) + '</td>' +
           '<td><div class="chips">' + (chips || '<span style="color:#9ca3af;">—</span>') + '</div></td>' +
@@ -427,7 +463,7 @@
     } else {
       body.innerHTML = rows.map(t =>
         '<tr>' +
-          '<td>' + esc(t.tripDate) + '</td>' +
+          '<td>' + esc(fmtDate(t.tripDate)) + '</td>' +
           '<td><b>' + esc(t.objectName || '—') + '</b></td>' +
           '<td>' + esc(t.route || '—') + '</td>' +
           '<td><b>' + esc(t.carName || '') + '</b><div style="color:#6b7280;font-size:12px;">' + esc(t.employee || '—') + '</div></td>' +
@@ -441,6 +477,68 @@
 
     renderTripDirections(rows);
     renderTripFacts(rows);
+  }
+
+  function renderHistory() {
+    const q = norm(val('histSearch'));
+    const type = val('histTypeFilter');
+    const rows = (state.maintenance || []).filter(r => {
+      const hit = !q || norm([r.carName, r.serviceItems, r.comment].join(' ')).includes(q);
+      const typeHit = !type || r.recordType === type;
+      return hit && typeHit;
+    });
+
+    const body = document.getElementById('historyBody');
+    if (!rows.length) {
+      body.innerHTML = '<tr><td colspan=\"7\" class=\"empty\">История работ пока пуста</td></tr>';
+    } else {
+      body.innerHTML = rows.map(r =>
+        '<tr>' +
+          '<td>' + esc(fmtDate(r.eventDate)) + '</td>' +
+          '<td><b>' + esc(r.carName) + '</b></td>' +
+          '<td>' + esc(r.recordType || '—') + '</td>' +
+          '<td><div class=\"chips\">' + workChips(r.serviceItems) + '</div></td>' +
+          '<td class=\"num\">' + fmtNum(r.mileage) + ' км</td>' +
+          '<td class=\"num\">₽ ' + fmtMoney(r.amount) + '</td>' +
+          '<td>' + esc(r.comment || '') + '</td>' +
+        '</tr>'
+      ).join('');
+    }
+
+    renderHistoryTop(rows);
+    renderHistoryTotals(rows);
+  }
+
+  function renderHistoryTop(rows) {
+    const map = {};
+    rows.forEach(r => {
+      const labels = String(r.serviceItems || 'Без описания').split(/[,;]+/).map(x => x.trim()).filter(Boolean);
+      (labels.length ? labels : ['Без описания']).forEach(label => {
+        map[label] = (map[label] || 0) + (Number(r.amount) || 0);
+      });
+    });
+    const list = Object.keys(map).map(k => ({ name: k, sum: map[k] })).sort((a, b) => b.sum - a.sum).slice(0, 6);
+    const total = list.reduce((s, r) => s + r.sum, 0) || 1;
+    document.getElementById('historyTopWorks').innerHTML = list.length ? list.map(r => {
+      const pct = Math.round((r.sum / total) * 100);
+      return '<div class=\"bar-row\"><div class=\"bar-label\"><span>' + esc(r.name) + '</span><span>₽ ' + fmtMoney(r.sum) + '</span></div><div class=\"bar-track\"><div class=\"bar-fill\" style=\"width:' + pct + '%\"></div></div></div>';
+    }).join('') : '<div class=\"empty\">Недостаточно данных для анализа</div>';
+  }
+
+  function renderHistoryTotals(rows) {
+    const totalAmount = rows.reduce((s, r) => s + (Number(r.amount) || 0), 0);
+    const totalCount = rows.length;
+    const avg = totalCount ? (totalAmount / totalCount) : 0;
+    const byType = {};
+    rows.forEach(r => {
+      const key = r.recordType || 'Прочее';
+      byType[key] = (byType[key] || 0) + 1;
+    });
+    const typeLines = Object.keys(byType).sort((a, b) => byType[b] - byType[a]).map(k => '<div style=\"margin-top:8px;\">' + esc(k) + ': <b>' + fmtNum(byType[k]) + '</b></div>').join('');
+    document.getElementById('historyTotals').innerHTML =
+      '<div class=\"mini-card\"><b>Всего записей</b><div style=\"margin-top:6px;font-size:22px;font-weight:800;\">' + fmtNum(totalCount) + '</div></div>' +
+      '<div class=\"mini-card\"><b>Общие расходы</b><div style=\"margin-top:6px;font-size:22px;font-weight:800;\">₽ ' + fmtMoney(totalAmount) + '</div></div>' +
+      '<div class=\"mini-card\"><b>Средний чек работ</b><div style=\"margin-top:6px;font-size:22px;font-weight:800;\">₽ ' + fmtMoney(avg) + '</div>' + typeLines + '</div>';
   }
 
   function renderTripDirections(rows) {
@@ -576,6 +674,23 @@
   }
 
   function val(id) { const el = document.getElementById(id); return el ? el.value : ''; }
+  function workChips(text) {
+    const items = String(text || '').split(/[,;]+/).map(x => x.trim()).filter(Boolean).slice(0, 5);
+    return items.length ? items.map(x => '<span class=\"chip\">' + esc(x) + '</span>').join('') : '<span style=\"color:#9ca3af;\">—</span>';
+  }
+  function fmtDate(v) {
+    const str = String(v || '').trim();
+    if (!str) return '';
+    if (/^\\d{2}\\.\\d{2}\\.\\d{4}$/.test(str)) return str;
+    const d = new Date(str);
+    if (!isNaN(d.getTime())) {
+      const dd = String(d.getDate()).padStart(2, '0');
+      const mm = String(d.getMonth() + 1).padStart(2, '0');
+      const yy = d.getFullYear();
+      return dd + '.' + mm + '.' + yy;
+    }
+    return str;
+  }
   function esc(v) { return String(v || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
   function fmtMoney(v) { return (Number(v)||0).toLocaleString('ru-RU', { minimumFractionDigits: 0, maximumFractionDigits: 0 }); }
   function fmtNum(v) { const n = Number(v)||0; return n.toLocaleString('ru-RU', { minimumFractionDigits: n%1===0?0:2, maximumFractionDigits: 2 }); }
