@@ -2099,9 +2099,15 @@ function ensureResponsibilitySheets_() {
     current = ss.insertSheet('Ответственные');
   }
   if (current.getLastRow() === 0) {
-    current.getRange(1, 1, 1, 5).setValues([['Артикул', 'Ответственный', 'Назначено', 'Кем', 'Комментарий']]);
-    formatHeader_(current, 1, 1, 1, 5);
+    current.getRange(1, 1, 1, 6).setValues([['Артикул', 'Ответственный', 'Назначено', 'Кем', 'Комментарий', 'Объект']]);
+    formatHeader_(current, 1, 1, 1, 6);
     current.setFrozenRows(1);
+  } else {
+    const header = current.getRange(1, 1, 1, Math.max(current.getLastColumn(), 6)).getValues()[0];
+    const objectHeader = String(header[5] || '').trim();
+    if (!objectHeader) {
+      current.getRange(1, 6).setValue('Объект');
+    }
   }
 
   let history = ss.getSheetByName('История ответственности');
@@ -2116,6 +2122,10 @@ function ensureResponsibilitySheets_() {
     formatHeader_(history, 1, 1, 1, 11);
     history.setFrozenRows(1);
   }
+}
+
+function getResponsibilityKey_(article, objectName) {
+  return normalizeText_(String(article || '').trim()) + '||' + normalizeText_(String(objectName || '').trim());
 }
 
 function getEmployees_() {
@@ -2175,23 +2185,33 @@ function getCurrentResponsibilityMap_() {
   const ss = SpreadsheetApp.getActiveSpreadsheet();
   const sheet = ss.getSheetByName('Ответственные');
   const lastRow = sheet.getLastRow();
-  if (lastRow < 2) return {};
+  if (lastRow < 2) return { byObject: {}, byArticle: {} };
 
-  const data = sheet.getRange(2, 1, lastRow - 1, 5).getValues();
+  const data = sheet.getRange(2, 1, lastRow - 1, 6).getValues();
   const map = {};
+  const legacyByArticle = {};
   data.forEach(function (r) {
     const article = String(r[0] || '').trim().toLowerCase();
     const employee = String(r[1] || '').trim();
+    const objectName = String(r[5] || '').trim();
     if (!article || !employee) return;
-    map[article] = {
+    const item = {
       article: String(r[0] || '').trim(),
+      objectName: objectName,
       employee: employee,
       assignedAt: formatDateTimeRu_(r[2]),
       assignedBy: String(r[3] || '').trim(),
       comment: String(r[4] || '').trim()
     };
+    map[getResponsibilityKey_(article, objectName)] = item;
+    if (!objectName && !legacyByArticle[article]) {
+      legacyByArticle[article] = item;
+    }
   });
-  return map;
+  return {
+    byObject: map,
+    byArticle: legacyByArticle
+  };
 }
 
 function appendResponsibilityHistory_(items, action, oldEmployee, newEmployee, user, comment) {
@@ -2280,7 +2300,9 @@ function getCurrentResponsibilityRows_(filters) {
       return Number(item.qty) > 0;
     })
     .map(function (item) {
-      const resp = respMap[String(item.article || '').trim().toLowerCase()] || null;
+      const article = String(item.article || '').trim();
+      const objectName = String(item.objectName || '').trim();
+      const resp = respMap.byObject[getResponsibilityKey_(article, objectName)] || null;
       return {
         objectName: String(item.objectName || '').trim(),
         article: String(item.article || '').trim(),
@@ -2354,17 +2376,21 @@ function saveResponsibilityAssignments(payload) {
 
     rows.forEach(function (row) {
       const article = String(row.article || '').trim();
+      const objectName = String(row.objectName || '').trim();
       if (!article) return;
-      const norm = article.toLowerCase();
-      if (currentMap[norm] && currentMap[norm].employee) {
-        throw new Error('У товара ' + article + ' уже назначен ответственный.');
+      if (!objectName) {
+        throw new Error('Не найден объект для товара ' + article + '.');
       }
-      rowsToAppend.push([article, employee, new Date(), user, comment]);
-      historyItems.push(row);
+      const current = currentMap.byObject[getResponsibilityKey_(article, objectName)] || null;
+      if (current && current.employee) {
+        throw new Error('У товара ' + article + ' на объекте "' + objectName + '" уже назначен ответственный.');
+      }
+      rowsToAppend.push([article, employee, new Date(), user, comment, objectName]);
+      historyItems.push(Object.assign({}, row, { objectName: objectName }));
     });
 
     if (!rowsToAppend.length) throw new Error('Нет строк для назначения.');
-    sheet.getRange(sheet.getLastRow() + 1, 1, rowsToAppend.length, 5).setValues(rowsToAppend);
+    sheet.getRange(sheet.getLastRow() + 1, 1, rowsToAppend.length, 6).setValues(rowsToAppend);
     appendResponsibilityHistory_(historyItems, 'Назначение', '', employee, user, comment);
     refreshAssigned();
     return 'Назначено позиций: ' + rowsToAppend.length;
@@ -2391,28 +2417,34 @@ function saveResponsibilityReassignments(payload) {
     const currentMap = getCurrentResponsibilityMap_();
     const user = Session.getActiveUser().getEmail() || '';
 
-    const data = sheet.getLastRow() >= 2 ? sheet.getRange(2, 1, sheet.getLastRow() - 1, 5).getValues() : [];
+    const data = sheet.getLastRow() >= 2 ? sheet.getRange(2, 1, sheet.getLastRow() - 1, 6).getValues() : [];
     const historyItems = [];
 
     rows.forEach(function (row) {
       const article = String(row.article || '').trim();
+      const objectName = String(row.objectName || '').trim();
+      if (!objectName) {
+        throw new Error('Не найден объект для товара ' + article + '.');
+      }
       const norm = article.toLowerCase();
-      const current = currentMap[norm];
+      const current = currentMap.byObject[getResponsibilityKey_(article, objectName)] || null;
       if (!current || !current.employee) {
-        throw new Error('У товара ' + article + ' нет текущего ответственного.');
+        throw new Error('У товара ' + article + ' на объекте "' + objectName + '" нет текущего ответственного.');
       }
 
       let targetRow = 0;
       for (var i = 0; i < data.length; i++) {
-        if (String(data[i][0] || '').trim().toLowerCase() === norm) {
+        const rowArticle = String(data[i][0] || '').trim().toLowerCase();
+        const rowObject = String(data[i][5] || '').trim();
+        if (rowArticle === norm && normalizeText_(rowObject) === normalizeText_(objectName)) {
           targetRow = i + 2;
           break;
         }
       }
-      if (!targetRow) throw new Error('Не найдена строка ответственного для ' + article);
+      if (!targetRow) throw new Error('Не найдена строка ответственного для ' + article + ' на объекте "' + objectName + '"');
 
       sheet.getRange(targetRow, 2, 1, 4).setValues([[employee, new Date(), user, comment]]);
-      historyItems.push(Object.assign({}, row, { oldEmployee: current.employee }));
+      historyItems.push(Object.assign({}, row, { objectName: objectName, oldEmployee: current.employee }));
     });
 
     appendResponsibilityHistory_(
@@ -2516,7 +2548,7 @@ function saveStorekeeperMassTransfer(payload) {
       const reassignRows = [];
 
       reassignedItems.forEach(function (item) {
-        const current = currentMap[String(item.article || '').trim().toLowerCase()];
+        const current = currentMap.byObject[getResponsibilityKey_(item.article, item.objectName)] || null;
         if (current && current.employee) {
           reassignRows.push(item);
         } else {
