@@ -997,6 +997,304 @@ function getManagementDashboardData(filters) {
   };
 }
 
+function exportManagementObjectReportPdf(payload) {
+  requirePermission_('managementDashboard', 'выгрузка PDF отчёта руководителя');
+
+  payload = payload || {};
+  const objectName = String(payload.objectName || '').trim();
+  if (!objectName) throw new Error('Не выбран объект для выгрузки PDF.');
+
+  const reportData = getManagementDashboardData({
+    objectName: objectName,
+    typeName: String(payload.typeName || '').trim(),
+    dateFrom: payload.dateFrom || '',
+    dateTo: payload.dateTo || ''
+  });
+
+  const products = (reportData.allProducts || []).slice().sort(function (a, b) {
+    const byType = String(a.type || '').localeCompare(String(b.type || ''), 'ru');
+    if (byType !== 0) return byType;
+    const byCategory = String(a.category || '').localeCompare(String(b.category || ''), 'ru');
+    if (byCategory !== 0) return byCategory;
+    return String(a.name || '').localeCompare(String(b.name || ''), 'ru');
+  });
+
+  const movements = (reportData.recentMovements || []).slice();
+  const responsibilities = (reportData.currentResponsibilities || []).slice();
+  const summaryByCategory = buildCategorySummary_(products);
+
+  const now = new Date();
+  const safeObject = objectName.replace(/[^\wА-Яа-яЁё\- ]+/g, '_').replace(/\s+/g, '_');
+  const fileName = 'Отчет_по_объекту_' + safeObject + '_' + Utilities.formatDate(now, Session.getScriptTimeZone(), 'yyyy-MM-dd') + '.pdf';
+  const doc = DocumentApp.create('TMP_' + fileName);
+
+  try {
+    const body = doc.getBody();
+    body.clear();
+    body.setAttributes({
+      [DocumentApp.Attribute.FONT_FAMILY]: 'Arial',
+      [DocumentApp.Attribute.FONT_SIZE]: 10
+    });
+
+    addTitlePage_(body, objectName, reportData.filters, now);
+    body.appendPageBreak();
+    addSectionHeading_(body, '1. Краткая сводка');
+    addSummarySection_(body, reportData);
+    addMiniChart_(body, 'Распределение стоимости по типам', reportData.summaryByType, 'value');
+
+    body.appendPageBreak();
+    addSectionHeading_(body, '2. Остатки по объекту');
+    addStocksSection_(body, products);
+
+    body.appendPageBreak();
+    addSectionHeading_(body, '3. Движение за период');
+    addMovementsSection_(body, movements);
+
+    body.appendPageBreak();
+    addSectionHeading_(body, '4. Инструмент и ответственные');
+    addResponsibilitiesSection_(body, responsibilities);
+
+    body.appendPageBreak();
+    addSectionHeading_(body, '5. Сводка по категориям');
+    addCategorySection_(body, summaryByCategory);
+    addMiniChart_(body, 'Топ категорий по стоимости', summaryByCategory, 'value');
+
+    body.appendPageBreak();
+    addSectionHeading_(body, '6. Итоговый вывод');
+    addConclusionSection_(body, reportData, summaryByCategory);
+
+    doc.saveAndClose();
+
+    const pdfBlob = DriveApp.getFileById(doc.getId()).getBlob().getAs(MimeType.PDF).setName(fileName);
+    return {
+      fileName: fileName,
+      mimeType: pdfBlob.getContentType(),
+      base64: Utilities.base64Encode(pdfBlob.getBytes())
+    };
+  } finally {
+    const tmpFile = DriveApp.getFileById(doc.getId());
+    if (tmpFile) tmpFile.setTrashed(true);
+  }
+}
+
+function formatMoneyRu_(value) {
+  const num = Number(value) || 0;
+  return num.toLocaleString('ru-RU', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
+
+function formatNumberRu_(value) {
+  const num = Number(value) || 0;
+  return num.toLocaleString('ru-RU', { minimumFractionDigits: num % 1 === 0 ? 0 : 2, maximumFractionDigits: 3 });
+}
+
+function addTitlePage_(body, objectName, filters, now) {
+  const logoMain = body.appendParagraph('CK');
+  logoMain.setAlignment(DocumentApp.HorizontalAlignment.LEFT);
+  logoMain.setAttributes({
+    [DocumentApp.Attribute.FONT_FAMILY]: 'Arial',
+    [DocumentApp.Attribute.FONT_SIZE]: 54,
+    [DocumentApp.Attribute.BOLD]: true,
+    [DocumentApp.Attribute.FOREGROUND_COLOR]: '#f5b700'
+  });
+
+  const logoSub = body.appendParagraph('строительная\nкомпания');
+  logoSub.setAlignment(DocumentApp.HorizontalAlignment.LEFT);
+  logoSub.setAttributes({
+    [DocumentApp.Attribute.FONT_FAMILY]: 'Arial',
+    [DocumentApp.Attribute.FONT_SIZE]: 20,
+    [DocumentApp.Attribute.BOLD]: true,
+    [DocumentApp.Attribute.FOREGROUND_COLOR]: '#6b7280'
+  });
+
+  body.appendParagraph('');
+  const title = body.appendParagraph('УПРАВЛЕНЧЕСКИЙ ОТЧЁТ ПО ОБЪЕКТУ');
+  title.setAlignment(DocumentApp.HorizontalAlignment.CENTER);
+  title.setAttributes({
+    [DocumentApp.Attribute.FONT_FAMILY]: 'Arial',
+    [DocumentApp.Attribute.FONT_SIZE]: 22,
+    [DocumentApp.Attribute.BOLD]: true
+  });
+
+  const objectLine = body.appendParagraph('Объект: ' + objectName);
+  objectLine.setAlignment(DocumentApp.HorizontalAlignment.CENTER);
+  objectLine.setAttributes({
+    [DocumentApp.Attribute.FONT_SIZE]: 14,
+    [DocumentApp.Attribute.BOLD]: true
+  });
+
+  const periodLine = body.appendParagraph(
+    'Период: ' + (filters.dateFrom || 'без ограничения') + ' — ' + (filters.dateTo || 'без ограничения')
+  );
+  periodLine.setAlignment(DocumentApp.HorizontalAlignment.CENTER);
+  periodLine.setAttributes({ [DocumentApp.Attribute.FONT_SIZE]: 12 });
+
+  const buildDateLine = body.appendParagraph('Дата формирования: ' + formatDateTimeRu_(now));
+  buildDateLine.setAlignment(DocumentApp.HorizontalAlignment.CENTER);
+  buildDateLine.setAttributes({ [DocumentApp.Attribute.FONT_SIZE]: 11, [DocumentApp.Attribute.FOREGROUND_COLOR]: '#4b5563' });
+}
+
+function addSectionHeading_(body, title) {
+  const p = body.appendParagraph(title);
+  p.setAttributes({
+    [DocumentApp.Attribute.FONT_SIZE]: 16,
+    [DocumentApp.Attribute.BOLD]: true,
+    [DocumentApp.Attribute.FOREGROUND_COLOR]: '#111827'
+  });
+}
+
+function addSummarySection_(body, reportData) {
+  const rows = [
+    ['Показатель', 'Значение'],
+    ['Общая стоимость остатков', formatMoneyRu_(reportData.kpi.totalValue)],
+    ['Общее количество', formatNumberRu_(reportData.kpi.totalQty)],
+    ['Количество позиций', formatNumberRu_(reportData.kpi.positionsCount)],
+    ['Движений за период', formatNumberRu_(reportData.kpi.movementsCount)],
+    ['Ответственных сотрудников', formatNumberRu_(reportData.kpi.responsibleCount)]
+  ];
+  styleTableHeader_(body.appendTable(rows));
+  body.appendParagraph('Краткий комментарий: показатели отражают текущее состояние остатков и активности по выбранному объекту.');
+}
+
+function addStocksSection_(body, products) {
+  const rows = [['Тип', 'Категория', 'Артикул', 'Товар', 'Ед.', 'Кол-во', 'Цена', 'Стоимость']];
+  products.forEach(function (r) {
+    rows.push([
+      String(r.type || ''),
+      String(r.category || ''),
+      String(r.article || ''),
+      String(r.name || ''),
+      String(r.unit || ''),
+      formatNumberRu_(r.qty),
+      formatMoneyRu_(r.price),
+      formatMoneyRu_(r.value)
+    ]);
+  });
+  styleTableHeader_(body.appendTable(rows));
+}
+
+function addMovementsSection_(body, rows) {
+  if (!rows.length) {
+    body.appendParagraph('За выбранный период движения не зафиксированы.');
+    return;
+  }
+  const tableRows = [['Дата', 'Операция', 'Товар', 'Тип', 'Кол-во', 'Откуда', 'Куда', 'Основание']];
+  rows.forEach(function (r) {
+    tableRows.push([
+      String(r.date || ''),
+      String(r.operation || ''),
+      String(r.name || ''),
+      String(r.type || ''),
+      formatNumberRu_(r.qty),
+      String(r.fromObj || ''),
+      String(r.toObj || ''),
+      String(r.basis || '')
+    ]);
+  });
+  styleTableHeader_(body.appendTable(tableRows));
+}
+
+function addResponsibilitiesSection_(body, rows) {
+  if (!rows.length) {
+    body.appendParagraph('На выбранном объекте не назначены ответственные по инструменту.');
+    return;
+  }
+  const tableRows = [['Ответственный', 'Артикул', 'Товар', 'Тип', 'Категория', 'Дата назначения', 'Комментарий']];
+  rows.forEach(function (r) {
+    tableRows.push([
+      String(r.employee || ''),
+      String(r.article || ''),
+      String(r.name || ''),
+      String(r.type || ''),
+      String(r.category || ''),
+      String(r.assignedAt || ''),
+      String(r.comment || '')
+    ]);
+  });
+  styleTableHeader_(body.appendTable(tableRows));
+}
+
+function addCategorySection_(body, categoryRows) {
+  const rows = [['Категория', 'Позиций', 'Количество', 'Стоимость']];
+  categoryRows.forEach(function (r) {
+    rows.push([
+      String(r.category || ''),
+      formatNumberRu_(r.itemsCount),
+      formatNumberRu_(r.qty),
+      formatMoneyRu_(r.value)
+    ]);
+  });
+  styleTableHeader_(body.appendTable(rows));
+}
+
+function addMiniChart_(body, title, rows, fieldName) {
+  const src = (rows || []).slice(0, 6);
+  if (!src.length) return;
+
+  body.appendParagraph('');
+  const h = body.appendParagraph(title);
+  h.setAttributes({ [DocumentApp.Attribute.BOLD]: true, [DocumentApp.Attribute.FONT_SIZE]: 12 });
+
+  const maxValue = src.reduce(function (max, r) {
+    const v = Number(r[fieldName]) || 0;
+    return v > max ? v : max;
+  }, 0) || 1;
+
+  src.forEach(function (r) {
+    const label = String(r.name || r.category || 'Без названия');
+    const value = Number(r[fieldName]) || 0;
+    const blocks = Math.max(1, Math.round((value / maxValue) * 20));
+    const line = label + '  ' + new Array(blocks + 1).join('█') + '  ' + formatMoneyRu_(value);
+    body.appendParagraph(line).setAttributes({ [DocumentApp.Attribute.FONT_SIZE]: 10, [DocumentApp.Attribute.FONT_FAMILY]: 'Courier New' });
+  });
+}
+
+function addConclusionSection_(body, reportData, summaryByCategory) {
+  const topCategory = summaryByCategory.length ? summaryByCategory[0] : null;
+  const topType = (reportData.summaryByType || []).length ? reportData.summaryByType[0] : null;
+
+  const lines = [];
+  lines.push('1) Объект содержит ' + formatNumberRu_(reportData.kpi.positionsCount) + ' товарных позиций на сумму ' + formatMoneyRu_(reportData.kpi.totalValue) + '.');
+  lines.push('2) За период зафиксировано ' + formatNumberRu_(reportData.kpi.movementsCount) + ' движений.');
+  lines.push('3) Назначено ' + formatNumberRu_(reportData.kpi.responsibleCount) + ' ответственных по инструменту.');
+  if (topCategory) {
+    lines.push('4) Наибольшая категория по стоимости: «' + topCategory.category + '» (' + formatMoneyRu_(topCategory.value) + ').');
+  }
+  if (topType) {
+    lines.push('5) Доминирующий тип: «' + topType.name + '» (' + formatMoneyRu_(topType.value) + ').');
+  }
+  lines.push('Рекомендация: провести ревизию низкооборачиваемых и нулевых позиций, а также обновить закрепления ответственных, где отсутствуют комментарии.');
+
+  lines.forEach(function (text) { body.appendParagraph(text); });
+}
+
+function buildCategorySummary_(products) {
+  const map = {};
+  (products || []).forEach(function (r) {
+    const category = String(r.category || '').trim() || 'Без категории';
+    if (!map[category]) map[category] = { category: category, qty: 0, value: 0, itemsCount: 0 };
+    map[category].qty += Number(r.qty) || 0;
+    map[category].value += Number(r.value) || 0;
+    map[category].itemsCount += 1;
+  });
+
+  return Object.keys(map).map(function (key) {
+    return {
+      category: map[key].category,
+      qty: round3_(map[key].qty),
+      value: round2_(map[key].value),
+      itemsCount: map[key].itemsCount
+    };
+  }).sort(function (a, b) { return b.value - a.value; });
+}
+
+function styleTableHeader_(table) {
+  const header = table.getRow(0);
+  for (let c = 0; c < header.getNumCells(); c++) {
+    header.getCell(c).setBackgroundColor('#eef3fb');
+    header.getCell(c).editAsText().setBold(true);
+  }
+}
+
 /**
  * =========================
  * INVENTORY
