@@ -997,6 +997,115 @@ function getManagementDashboardData(filters) {
   };
 }
 
+function exportManagementObjectReportPdf(payload) {
+  requirePermission_('managementDashboard', 'выгрузка PDF отчёта руководителя');
+
+  payload = payload || {};
+  const objectName = String(payload.objectName || '').trim();
+  if (!objectName) throw new Error('Не выбран объект для выгрузки PDF.');
+
+  const reportData = getManagementDashboardData({
+    objectName: objectName,
+    typeName: String(payload.typeName || '').trim(),
+    dateFrom: payload.dateFrom || '',
+    dateTo: payload.dateTo || ''
+  });
+
+  const products = (reportData.allProducts || [])
+    .slice()
+    .sort(function (a, b) {
+      const byType = String(a.type || '').localeCompare(String(b.type || ''), 'ru');
+      if (byType !== 0) return byType;
+      const byCategory = String(a.category || '').localeCompare(String(b.category || ''), 'ru');
+      if (byCategory !== 0) return byCategory;
+      return String(a.name || '').localeCompare(String(b.name || ''), 'ru');
+    });
+
+  const now = new Date();
+  const safeObject = objectName.replace(/[^\wА-Яа-яЁё\- ]+/g, '_').replace(/\s+/g, '_');
+  const fileName = 'Отчет_по_объекту_' + safeObject + '_' + Utilities.formatDate(now, Session.getScriptTimeZone(), 'yyyy-MM-dd') + '.pdf';
+  const doc = DocumentApp.create('TMP_' + fileName);
+
+  try {
+    const body = doc.getBody();
+    body.clear();
+
+    body.appendParagraph('Информация по объекту').setHeading(DocumentApp.ParagraphHeading.HEADING1);
+    body.appendParagraph('Объект: ' + objectName).setBold(true);
+    body.appendParagraph('Дата формирования: ' + formatDateTimeRu_(now));
+    body.appendParagraph(
+      'Период: ' +
+      (reportData.filters.dateFrom ? reportData.filters.dateFrom : 'без ограничения') +
+      ' — ' +
+      (reportData.filters.dateTo ? reportData.filters.dateTo : 'без ограничения')
+    );
+    body.appendParagraph('Тип фильтра: ' + (reportData.filters.typeName || 'Все типы'));
+    body.appendParagraph('');
+
+    body.appendParagraph('Сводные показатели').setHeading(DocumentApp.ParagraphHeading.HEADING2);
+    const summaryRows = [
+      ['Метрика', 'Значение'],
+      ['Общая стоимость', formatMoneyRu_(reportData.kpi.totalValue)],
+      ['Всего количества', formatNumberRu_(reportData.kpi.totalQty)],
+      ['Всего позиций', formatNumberRu_(reportData.kpi.positionsCount)],
+      ['Количество движений', formatNumberRu_(reportData.kpi.movementsCount)],
+      ['Количество ответственных', formatNumberRu_(reportData.kpi.responsibleCount)]
+    ];
+    body.appendTable(summaryRows);
+    body.appendParagraph('');
+
+    body.appendParagraph('Стоимость по типам').setHeading(DocumentApp.ParagraphHeading.HEADING2);
+    const typeRows = [['Тип', 'Количество', 'Стоимость']];
+    (reportData.summaryByType || []).forEach(function (row) {
+      typeRows.push([
+        String(row.name || ''),
+        formatNumberRu_(row.qty),
+        formatMoneyRu_(row.value)
+      ]);
+    });
+    body.appendTable(typeRows);
+    body.appendParagraph('');
+
+    body.appendParagraph('Список товаров по объекту (сортировка: Тип → Категория → Товар)').setHeading(DocumentApp.ParagraphHeading.HEADING2);
+    const productRows = [['Тип', 'Категория', 'Артикул', 'Товар', 'Ед.', 'Кол-во', 'Цена', 'Стоимость']];
+    products.forEach(function (row) {
+      productRows.push([
+        String(row.type || ''),
+        String(row.category || ''),
+        String(row.article || ''),
+        String(row.name || ''),
+        String(row.unit || ''),
+        formatNumberRu_(row.qty),
+        formatMoneyRu_(row.price),
+        formatMoneyRu_(row.value)
+      ]);
+    });
+    body.appendTable(productRows);
+
+    doc.saveAndClose();
+
+    const pdfBlob = DriveApp.getFileById(doc.getId()).getBlob().getAs(MimeType.PDF).setName(fileName);
+    return {
+      fileName: fileName,
+      mimeType: pdfBlob.getContentType(),
+      base64: Utilities.base64Encode(pdfBlob.getBytes())
+    };
+  } finally {
+    const tmpFile = DriveApp.getFileById(doc.getId());
+    if (tmpFile) tmpFile.setTrashed(true);
+  }
+}
+
+function formatMoneyRu_(value) {
+  const num = Number(value) || 0;
+  return num.toLocaleString('ru-RU', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
+
+function formatNumberRu_(value) {
+  const num = Number(value) || 0;
+  return num.toLocaleString('ru-RU', { minimumFractionDigits: num % 1 === 0 ? 0 : 2, maximumFractionDigits: 3 });
+}
+
 /**
  * =========================
  * INVENTORY
