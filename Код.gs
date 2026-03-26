@@ -674,6 +674,22 @@ function showFleetTripsPanel() {
   SpreadsheetApp.getUi().showModalDialog(html, 'Автопарк и поездки');
 }
 
+function showFleetTripsPanel() {
+  requirePermission_('managementDashboard', 'панель автопарка и поездок');
+  const html = HtmlService.createHtmlOutputFromFile('FleetTripsPanel')
+    .setWidth(1400)
+    .setHeight(900);
+  SpreadsheetApp.getUi().showModalDialog(html, 'Автопарк и поездки');
+}
+
+function showFleetTripsPanel() {
+  requirePermission_('managementDashboard', 'панель автопарка и поездок');
+  const html = HtmlService.createHtmlOutputFromFile('FleetTripsPanel')
+    .setWidth(1400)
+    .setHeight(900);
+  SpreadsheetApp.getUi().showModalDialog(html, 'Автопарк и поездки');
+}
+
 function showInventoryForm() {
   requirePermission_('inventory', 'инвентаризация');
   const html = HtmlService.createHtmlOutputFromFile('InventoryForm')
