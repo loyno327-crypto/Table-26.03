@@ -2302,9 +2302,7 @@ function getCurrentResponsibilityRows_(filters) {
     .map(function (item) {
       const article = String(item.article || '').trim();
       const objectName = String(item.objectName || '').trim();
-      const resp = respMap.byObject[getResponsibilityKey_(article, objectName)] ||
-        respMap.byArticle[normalizeText_(article)] ||
-        null;
+      const resp = respMap.byObject[getResponsibilityKey_(article, objectName)] || null;
       return {
         objectName: String(item.objectName || '').trim(),
         article: String(item.article || '').trim(),
@@ -2383,8 +2381,7 @@ function saveResponsibilityAssignments(payload) {
       if (!objectName) {
         throw new Error('Не найден объект для товара ' + article + '.');
       }
-      const current = currentMap.byObject[getResponsibilityKey_(article, objectName)] ||
-        currentMap.byArticle[normalizeText_(article)];
+      const current = currentMap.byObject[getResponsibilityKey_(article, objectName)] || null;
       if (current && current.employee) {
         throw new Error('У товара ' + article + ' на объекте "' + objectName + '" уже назначен ответственный.');
       }
@@ -2430,8 +2427,7 @@ function saveResponsibilityReassignments(payload) {
         throw new Error('Не найден объект для товара ' + article + '.');
       }
       const norm = article.toLowerCase();
-      const current = currentMap.byObject[getResponsibilityKey_(article, objectName)] ||
-        currentMap.byArticle[norm];
+      const current = currentMap.byObject[getResponsibilityKey_(article, objectName)] || null;
       if (!current || !current.employee) {
         throw new Error('У товара ' + article + ' на объекте "' + objectName + '" нет текущего ответственного.');
       }
@@ -2552,8 +2548,7 @@ function saveStorekeeperMassTransfer(payload) {
       const reassignRows = [];
 
       reassignedItems.forEach(function (item) {
-        const current = currentMap.byObject[getResponsibilityKey_(item.article, item.objectName)] ||
-          currentMap.byArticle[normalizeText_(item.article)];
+        const current = currentMap.byObject[getResponsibilityKey_(item.article, item.objectName)] || null;
         if (current && current.employee) {
           reassignRows.push(item);
         } else {

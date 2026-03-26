@@ -912,9 +912,7 @@ function getCurrentResponsibilityLookup() {
 }
 function getResponsibilityForRow(row, lookup) {
   const responsibilityLookup = lookup || getCurrentResponsibilityLookup();
-  return responsibilityLookup.byObject[normalizeText((row.article || '') + '||' + (row.objectName || ''))] ||
-    responsibilityLookup.byArticle[normalizeText(row.article || '')] ||
-    null;
+  return responsibilityLookup.byObject[normalizeText((row.article || '') + '||' + (row.objectName || ''))] || null;
 }
 function getAssignedRowsFiltered(filters) {
   const currentRows = Array.isArray(initData.currentResponsibilities) ? initData.currentResponsibilities : [];
