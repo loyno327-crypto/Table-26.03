@@ -674,6 +674,14 @@ function showFleetTripsPanel() {
   SpreadsheetApp.getUi().showModalDialog(html, 'Автопарк и поездки');
 }
 
+function showFleetTripsPanel() {
+  requirePermission_('managementDashboard', 'панель автопарка и поездок');
+  const html = HtmlService.createHtmlOutputFromFile('FleetTripsPanel')
+    .setWidth(1400)
+    .setHeight(900);
+  SpreadsheetApp.getUi().showModalDialog(html, 'Автопарк и поездки');
+}
+
 function showInventoryForm() {
   requirePermission_('inventory', 'инвентаризация');
   const html = HtmlService.createHtmlOutputFromFile('InventoryForm')
@@ -1013,13 +1021,36 @@ function getManagementDashboardData(filters) {
 function getFleetPanelData() {
   requirePermission_('managementDashboard', 'панель автопарка');
   const sheets = ensureFleetSheets_();
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const dir = ss.getSheetByName('Справочник');
 
   const vehicles = readFleetVehicles_(sheets.vehicles);
+  const maintenance = readFleetMaintenance_(sheets.maintenance);
   const trips = readFleetTrips_(sheets.trips).slice(0, 200);
+  const objects = dir ? getColumnValues(dir, 1, 2) : [];
+  const employees = getEmployees_();
+
+  const totalServiceCost = maintenance.reduce(function (sum, r) { return sum + (Number(r.amount) || 0); }, 0);
+  const totalTripMileage = trips.reduce(function (sum, r) { return sum + (Number(r.mileage) || 0); }, 0);
+  const attentionCount = vehicles.filter(function (v) {
+    return v.status === 'Скоро ТО' || v.status === 'Просрочено';
+  }).length;
 
   return {
     vehicles: vehicles,
-    trips: trips
+    maintenance: maintenance,
+    trips: trips,
+    references: {
+      objects: objects,
+      employees: employees
+    },
+    summary: {
+      carsCount: vehicles.length,
+      totalServiceCost: round2_(totalServiceCost),
+      tripsCount: trips.length,
+      totalTripMileage: round3_(totalTripMileage),
+      attentionCount: attentionCount
+    }
   };
 }
 
@@ -1044,12 +1075,62 @@ function saveFleetVehicle(payload) {
     String(payload.workDone || '').trim(),
     round2_(Number(payload.repairCost) || 0),
     String(payload.comment || '').trim(),
+    String(payload.active || 'Да').trim(),
     formatDateTimeRu_(new Date())
   ];
 
   sheet.getRange(sheet.getLastRow() + 1, 1, 1, row.length).setValues([row]);
   autoResize_(sheet, 1, row.length);
   return 'Автомобиль сохранён.';
+}
+
+function saveFleetMaintenance(payload) {
+  requirePermission_('managementDashboard', 'сохранение ТО/ремонта');
+  payload = payload || {};
+  const sheets = ensureFleetSheets_();
+  const vehicles = readFleetVehicles_(sheets.vehicles);
+
+  const vehicleId = String(payload.vehicleId || '').trim();
+  const vehicle = vehicles.find(function (v) { return v.id === vehicleId; });
+  if (!vehicle) throw new Error('Выберите автомобиль.');
+
+  const eventDate = String(payload.eventDate || '').trim();
+  if (!eventDate) throw new Error('Укажи дату обслуживания.');
+
+  const amount = Number(payload.amount) || 0;
+  const mileage = Number(payload.mileage) || 0;
+  const nextServiceMileage = Number(payload.nextServiceMileage) || 0;
+
+  const row = [
+    Utilities.getUuid(),
+    eventDate,
+    vehicleId,
+    vehicle.carName,
+    String(payload.recordType || 'ТО').trim(),
+    round3_(mileage),
+    String(payload.serviceItems || '').trim(),
+    round2_(amount),
+    String(payload.comment || '').trim(),
+    round3_(nextServiceMileage),
+    Session.getActiveUser().getEmail() || '',
+    new Date()
+  ];
+
+  sheets.maintenance.getRange(sheets.maintenance.getLastRow() + 1, 1, 1, row.length).setValues([row]);
+  autoResize_(sheets.maintenance, 1, row.length);
+
+  if (mileage > Number(vehicle.currentMileage || 0)) {
+    sheets.vehicles.getRange(vehicle.sheetRow, 5).setValue(round3_(mileage));
+  }
+  if (nextServiceMileage > 0) {
+    sheets.vehicles.getRange(vehicle.sheetRow, 6).setValue(round3_(nextServiceMileage));
+  }
+  sheets.vehicles.getRange(vehicle.sheetRow, 7).setValue(eventDate);
+  sheets.vehicles.getRange(vehicle.sheetRow, 9).setValue(String(payload.serviceItems || '').trim());
+  sheets.vehicles.getRange(vehicle.sheetRow, 10).setValue(round2_(amount));
+  sheets.vehicles.getRange(vehicle.sheetRow, 13).setValue(formatDateTimeRu_(new Date()));
+
+  return 'Запись ТО/ремонта сохранена.';
 }
 
 function saveFleetTrip(payload) {
@@ -1068,16 +1149,25 @@ function saveFleetTrip(payload) {
 
   const tripDate = String(payload.tripDate || '').trim() || Utilities.formatDate(new Date(), Session.getScriptTimeZone(), 'yyyy-MM-dd');
   const tripType = String(payload.tripType || '').trim() || 'По городу';
+  const objectName = String(payload.objectName || '').trim();
   const route = String(payload.route || '').trim();
+  const employee = String(payload.employee || '').trim();
+  const purpose = String(payload.purpose || '').trim();
+  const expenses = round2_(Number(payload.expenses) || 0);
   const comment = String(payload.comment || '').trim();
 
   const tripRow = [
+    Utilities.getUuid(),
     tripDate,
     vehicleId,
     vehicle.carName,
+    employee,
     tripType,
+    objectName,
     route,
+    purpose,
     round3_(mileage),
+    expenses,
     comment,
     Session.getActiveUser().getEmail() || '',
     new Date()
@@ -1096,9 +1186,11 @@ function saveFleetTrip(payload) {
 function ensureFleetSheets_() {
   const ss = SpreadsheetApp.getActiveSpreadsheet();
   let vehicles = ss.getSheetByName('Автопарк');
+  let maintenance = ss.getSheetByName('ТО и ремонты');
   let trips = ss.getSheetByName('Поездки');
 
   if (!vehicles) vehicles = ss.insertSheet('Автопарк');
+  if (!maintenance) maintenance = ss.insertSheet('ТО и ремонты');
   if (!trips) trips = ss.insertSheet('Поездки');
 
   if (vehicles.getLastRow() === 0) {
@@ -1114,6 +1206,7 @@ function ensureFleetSheets_() {
       'Что делалось',
       'Сумма ремонта',
       'Комментарий',
+      'Активность',
       'Обновлено'
     ]];
     vehicles.getRange(1, 1, 1, headers[0].length).setValues(headers);
@@ -1121,14 +1214,39 @@ function ensureFleetSheets_() {
     vehicles.setFrozenRows(1);
   }
 
-  if (trips.getLastRow() === 0) {
+  if (maintenance.getLastRow() === 0) {
     const headers = [[
+      'ID',
       'Дата',
       'ID авто',
       'Автомобиль',
+      'Тип записи',
+      'Пробег на момент',
+      'Что делалось',
+      'Сумма',
+      'Комментарий',
+      'Следующее ТО (км)',
+      'Пользователь',
+      'Создано'
+    ]];
+    maintenance.getRange(1, 1, 1, headers[0].length).setValues(headers);
+    formatHeader_(maintenance, 1, 1, 1, headers[0].length);
+    maintenance.setFrozenRows(1);
+  }
+
+  if (trips.getLastRow() === 0) {
+    const headers = [[
+      'ID',
+      'Дата',
+      'ID авто',
+      'Автомобиль',
+      'Сотрудник',
       'Тип поездки',
+      'Объект',
       'Маршрут/Объект',
+      'Цель поездки',
       'Накатанный пробег, км',
+      'Расходы',
       'Комментарий',
       'Пользователь',
       'Создано'
@@ -1140,6 +1258,7 @@ function ensureFleetSheets_() {
 
   return {
     vehicles: vehicles,
+    maintenance: maintenance,
     trips: trips
   };
 }
@@ -1148,7 +1267,7 @@ function readFleetVehicles_(sheet) {
   const lastRow = sheet.getLastRow();
   if (lastRow < 2) return [];
 
-  return sheet.getRange(2, 1, lastRow - 1, 12).getValues()
+  return sheet.getRange(2, 1, lastRow - 1, 14).getValues()
     .map(function (r, idx) {
       return {
         sheetRow: idx + 2,
@@ -1163,32 +1282,71 @@ function readFleetVehicles_(sheet) {
         workDone: String(r[8] || '').trim(),
         repairCost: round2_(Number(r[9]) || 0),
         comment: String(r[10] || '').trim(),
-        updatedAt: String(r[11] || '').trim()
+        active: String(r[11] || '').trim() || 'Да',
+        updatedAt: String(r[12] || '').trim(),
+        status: calcVehicleServiceStatus_(Number(r[4]) || 0, Number(r[5]) || 0)
       };
     })
     .filter(function (v) { return v.id && v.carName; })
     .sort(function (a, b) { return String(a.carName).localeCompare(String(b.carName), 'ru'); });
 }
 
+function readFleetMaintenance_(sheet) {
+  const lastRow = sheet.getLastRow();
+  if (lastRow < 2) return [];
+
+  return sheet.getRange(2, 1, lastRow - 1, 12).getValues()
+    .map(function (r) {
+      return {
+        id: String(r[0] || '').trim(),
+        eventDate: String(r[1] || '').trim(),
+        vehicleId: String(r[2] || '').trim(),
+        carName: String(r[3] || '').trim(),
+        recordType: String(r[4] || '').trim(),
+        mileage: round3_(Number(r[5]) || 0),
+        serviceItems: String(r[6] || '').trim(),
+        amount: round2_(Number(r[7]) || 0),
+        comment: String(r[8] || '').trim(),
+        nextServiceMileage: round3_(Number(r[9]) || 0),
+        user: String(r[10] || '').trim(),
+        createdAt: r[11] instanceof Date ? r[11].getTime() : 0
+      };
+    })
+    .sort(function (a, b) { return b.createdAt - a.createdAt; });
+}
+
 function readFleetTrips_(sheet) {
   const lastRow = sheet.getLastRow();
   if (lastRow < 2) return [];
 
-  return sheet.getRange(2, 1, lastRow - 1, 9).getValues()
+  return sheet.getRange(2, 1, lastRow - 1, 13).getValues()
     .map(function (r) {
       return {
-        tripDate: String(r[0] || '').trim(),
-        vehicleId: String(r[1] || '').trim(),
-        carName: String(r[2] || '').trim(),
-        tripType: String(r[3] || '').trim(),
-        route: String(r[4] || '').trim(),
-        mileage: round3_(Number(r[5]) || 0),
-        comment: String(r[6] || '').trim(),
-        user: String(r[7] || '').trim(),
-        createdAt: r[8] instanceof Date ? r[8].getTime() : 0
+        id: String(r[0] || '').trim(),
+        tripDate: String(r[1] || '').trim(),
+        vehicleId: String(r[2] || '').trim(),
+        carName: String(r[3] || '').trim(),
+        employee: String(r[4] || '').trim(),
+        tripType: String(r[5] || '').trim(),
+        objectName: String(r[6] || '').trim(),
+        route: String(r[7] || '').trim(),
+        purpose: String(r[8] || '').trim(),
+        mileage: round3_(Number(r[9]) || 0),
+        expenses: round2_(Number(r[10]) || 0),
+        comment: String(r[11] || '').trim(),
+        user: String(r[12] || '').trim(),
+        createdAt: r[13] instanceof Date ? r[13].getTime() : 0
       };
     })
     .sort(function (a, b) { return b.createdAt - a.createdAt; });
+}
+
+function calcVehicleServiceStatus_(currentMileage, nextServiceMileage) {
+  const current = Number(currentMileage) || 0;
+  const next = Number(nextServiceMileage) || 0;
+  if (!next || next <= current) return 'Просрочено';
+  if ((next - current) <= 1000) return 'Скоро ТО';
+  return 'В норме';
 }
 
 /**
